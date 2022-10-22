@@ -1,0 +1,86 @@
+version: '3'
+
+volumes:
+  kate_local_postgres_data: {}
+  kate_local_postgres_data_backups: {}
+
+services:
+  django: &django
+    build:
+      context: .
+      dockerfile: ./compose/local/django/Dockerfile
+    image: kate_local_django
+    container_name: kate_local_django
+    platform: linux/x86_64
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - .:/app:z
+    env_file:
+      - ./.envs/.local/.django
+      - ./.envs/.local/.postgres
+    ports:
+      - "8000:8000"
+    command: /start
+
+  postgres:
+    build:
+      context: .
+      dockerfile: ./compose/production/postgres/Dockerfile
+    image: kate_production_postgres
+    container_name: kate_local_postgres
+    volumes:
+      - kate_local_postgres_data:/var/lib/postgresql/data:Z
+      - kate_local_postgres_data_backups:/backups:z
+    env_file:
+      - ./.envs/.local/.postgres
+
+  docs:
+    image: kate_local_docs
+    container_name: kate_local_docs
+    platform: linux/x86_64
+    build:
+      context: .
+      dockerfile: ./compose/local/docs/Dockerfile
+    env_file:
+      - ./.envs/.local/.django
+    volumes:
+      - ./docs:/docs:z
+      - ./config:/app/config:z
+      - ./kate:/app/kate:z
+    ports:
+      - "9000:9000"
+    command: /start-docs
+
+  redis:
+    image: redis:6
+    container_name: kate_local_redis
+
+  celeryworker:
+    <<: *django
+    image: kate_local_celeryworker
+    container_name: kate_local_celeryworker
+    depends_on:
+      - redis
+      - postgres
+    ports: []
+    command: /start-celeryworker
+
+  celerybeat:
+    <<: *django
+    image: kate_local_celerybeat
+    container_name: kate_local_celerybeat
+    depends_on:
+      - redis
+      - postgres
+    ports: []
+    command: /start-celerybeat
+
+  flower:
+    <<: *django
+    image: kate_local_flower
+    container_name: kate_local_flower
+    ports:
+      - "5555:5555"
+    command: /start-flower
